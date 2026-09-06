@@ -4,22 +4,12 @@ set -e
 
 NAMESPACE="novapay"
 SERVICE="novapay"
+ROLLBACK_VERSION="blue"
 
-CURRENT_VERSION=$(kubectl get service "$SERVICE" \
-  -n "$NAMESPACE" \
-  -o jsonpath='{.spec.selector.version}')
-
-if [ "$CURRENT_VERSION" = "blue" ]; then
-    ROLLBACK_VERSION="green"
-else
-    ROLLBACK_VERSION="blue"
-fi
-
-echo "Current version : $CURRENT_VERSION"
-echo "Rollback target : $ROLLBACK_VERSION"
+echo "Rolling back production traffic to $ROLLBACK_VERSION..."
 
 kubectl patch service "$SERVICE" \
   -n "$NAMESPACE" \
   -p "{\"spec\":{\"selector\":{\"app\":\"novapay\",\"version\":\"$ROLLBACK_VERSION\"}}}"
 
-echo "Traffic rolled back to $ROLLBACK_VERSION"
+echo "Rollback complete: traffic is now on $ROLLBACK_VERSION"
