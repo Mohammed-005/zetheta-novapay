@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: novapay-stable
+  namespace: novapay
+spec:
+  selector:
+    app: novapay
+    version: blue
+  ports:
+    - port: 80
+      targetPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: novapay-canary
+  namespace: novapay
+spec:
+  selector:
+    app: novapay
+    version: canary
+  ports:
+    - port: 80
+      targetPort: 8080
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: novapay-gateway
+  namespace: novapay
+data:
+  nginx.conf: |
+    events {}
+
+    http {
+      upstream stable {
+        server novapay-stable.novapay.svc.cluster.local:80;
+      }
+
+      upstream canary {
+        server novapay-canary.novapay.svc.cluster.local:80;
+      }
+
+      map $http_x_canary $backend {
+        default stable;
+        "true" canary;
+      }
+
+      server {
+        listen 80;
+
+        location / {
+          proxy_pass http://$backend;
+          proxy_set_header Host $host;
+          proxy_set_header X-Canary-Backend $backend;
+        }
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: novapay-gateway
+  namespace: novapay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: novapay-gateway
+  template:
+    metadata:
+      labels:
+        app: novapay-gateway
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: config
+          configMap:
+            name: novapay-gateway
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: novapay-gateway
+  namespace: novapay
+spec:
+  selector:
+    app: novapay-gateway
+  ports:
+    - port: 80
+      targetPort: 80
