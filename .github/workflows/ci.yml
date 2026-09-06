@@ -212,7 +212,7 @@ jobs:
           opa eval \
             --data policies/compliance.rego \
             --input policies/input.json \
-            "data.novapay.compliance_pass"
+            "data.novapay.compliance.compliance_pass"
 
   # ============================================================
   # 8. PIPELINE SUMMARY
