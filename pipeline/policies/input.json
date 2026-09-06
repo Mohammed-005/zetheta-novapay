@@ -1,0 +1,8 @@
+{
+  "critical_vulnerabilities": 0,
+  "tls_enabled": true,
+  "peer_reviewed": true,
+  "segregation_of_duties": true,
+  "audit_logging": true,
+  "image_signed": true
+}

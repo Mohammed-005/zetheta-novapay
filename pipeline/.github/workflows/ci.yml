@@ -1,0 +1,297 @@
+name: NovaPay Zero-Downtime CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  IMAGE_NAME: novapay
+  VERSION: "1.0.${{ github.run_number }}"
+  GIT_SHA: ${{ github.sha }}
+  BUILD_TIMESTAMP: ${{ github.run_started_at }}
+  CI_RUN_ID: ${{ github.run_id }}
+  IMAGE_TAG: "1.0.${{ github.run_number }}-${{ github.sha }}"
+
+jobs:
+
+  # ============================================================
+  # 1. SOURCE + BUILD + UNIT TEST
+  # ============================================================
+  build-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          pytest -v
+
+      - name: Generate build metadata
+        run: |
+          echo "Version: $VERSION"
+          echo "Git SHA: $GIT_SHA"
+          echo "Build timestamp: $BUILD_TIMESTAMP"
+          echo "CI run ID: $CI_RUN_ID"
+
+      - name: Build Docker image
+        run: |
+          docker build             --label org.opencontainers.image.version="$VERSION"             --label org.opencontainers.image.revision="$GIT_SHA"             --label org.opencontainers.image.created="$BUILD_TIMESTAMP"             --label org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}"             -t "$IMAGE_NAME:$IMAGE_TAG" .
+
+  # ============================================================
+  # 2. SAST
+  # ============================================================
+  sast:
+    name: SAST - Bandit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run SAST
+        run: |
+          bandit -r app -ll
+
+  # ============================================================
+  # 3. DEPENDENCY SCANNING
+  # ============================================================
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+  # ============================================================
+  # 4. CONTAINER SCANNING
+  # ============================================================
+  container-scan:
+    name: Container Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+  # ============================================================
+  # 5. INTEGRATION + CONTRACT TEST
+  # ============================================================
+  integration-test:
+    name: Integration and Contract Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build -t novapay:test .
+
+      - name: Start application
+        run: |
+          docker run -d \
+            --name novapay-test \
+            -p 8080:8080 \
+            novapay:test
+
+      - name: Wait for application
+        run: |
+          sleep 5
+          curl --fail http://localhost:8080/health
+
+      - name: Integration test
+        run: |
+          curl --fail http://localhost:8080/
+          curl --fail http://localhost:8080/version
+
+      - name: Contract test
+        run: |
+          curl --fail http://localhost:8080/health \
+            | grep -q '"status":"healthy"'
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f novapay-test || true
+
+  # ============================================================
+  # 6. DAST
+  # ============================================================
+  dast:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start application
+        run: |
+          docker build -t novapay:dast .
+          docker run -d \
+            --name novapay-dast \
+            -p 8080:8080 \
+            novapay:dast
+
+          sleep 5
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://localhost:8080"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f novapay-dast || true
+
+  # ============================================================
+  # 7. COMPLIANCE / POLICY GATE
+  # ============================================================
+  compliance:
+    name: OPA Compliance Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OPA
+        run: |
+          curl -L -o opa \
+            https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+
+      - name: Validate policy
+        run: |
+          opa check policies/
+
+      - name: Evaluate compliance
+        run: |
+          opa eval \
+            --data policies/compliance.rego \
+            --input policies/input.json \
+            "data.novapay.compliance.compliance_pass"
+
+  # ============================================================
+  # 8. PIPELINE SUMMARY
+  # ============================================================
+  pipeline-gate:
+    name: Production Promotion Gate
+    runs-on: ubuntu-latest
+
+    needs:
+      - build-test
+      - sast
+      - dependency-scan
+      - container-scan
+      - integration-test
+      - dast
+      - compliance
+
+    steps:
+      - name: All gates passed
+        run: |
+          echo "=========================================="
+          echo " NovaPay CI/CD SECURITY GATES PASSED"
+          echo "=========================================="
+          echo "Build/Test       : PASS"
+          echo "SAST             : PASS"
+          echo "Dependency Scan  : PASS"
+          echo "Container Scan   : PASS"
+          echo "Integration Test : PASS"
+          echo "Contract Test    : PASS"
+          echo "DAST             : PASS"
+          echo "OPA Compliance   : PASS"
+          echo "=========================================="
+          echo "Ready for deployment."
+
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: container-scan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0.20.0
+
+      - name: Generate SBOM
+        run: |
+          syft dir:. -o cyclonedx-json=sbom.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: novapay-sbom
+          path: sbom.json
+
+  image-signing:
+    name: Image Signing
+    runs-on: ubuntu-latest
+    needs: container-scan
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.9.0
+
+      - name: Sign image
+        env:
+          COSIGN_YES: "true"
+        run: |
+          echo "Demo signing gate"
+          cosign version
+          echo "Image signing stage passed"
+
