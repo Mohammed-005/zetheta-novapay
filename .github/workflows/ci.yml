@@ -241,6 +241,8 @@ jobs:
       - integration-test
       - dast
       - compliance
+      - sbom
+      - image-signing
 
     steps:
       - name: All gates passed
