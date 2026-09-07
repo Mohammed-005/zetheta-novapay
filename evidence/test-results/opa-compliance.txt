@@ -1,0 +1,16 @@
+{
+  "result": [
+    {
+      "expressions": [
+        {
+          "value": true,
+          "text": "data.novapay.compliance.compliance_pass",
+          "location": {
+            "row": 1,
+            "col": 1
+          }
+        }
+      ]
+    }
+  ]
+}

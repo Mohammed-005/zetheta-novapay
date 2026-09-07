@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-8.4.2, pluggy-1.6.0 -- /home/mohammed/zetheta-project/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/mohammed/zetheta-project
+collecting ... collected 3 items
+
+tests/test_app.py::test_home PASSED                                      [ 33%]
+tests/test_app.py::test_health PASSED                                    [ 66%]
+tests/test_app.py::test_version PASSED                                   [100%]
+
+============================== 3 passed in 0.06s ===============================
