@@ -2,6 +2,7 @@
 set -euo pipefail
 
 MAX_LATENCY_INCREASE=20
+MEASURED_LATENCY_INCREASE="${1:-0}"
 
 echo "=== NovaPay Zero-Downtime Migration Gate ==="
 echo
@@ -17,7 +18,14 @@ echo "Phase 3: CONTRACT"
 echo "Forward-only cleanup after application compatibility is confirmed"
 echo "PASS"
 echo
-echo "Migration latency threshold: ${MAX_LATENCY_INCREASE}%"
-echo "If query latency increases beyond ${MAX_LATENCY_INCREASE}%, migration must abort."
+echo "Measured latency increase: ${MEASURED_LATENCY_INCREASE}%"
+echo "Maximum allowed latency increase: ${MAX_LATENCY_INCREASE}%"
 echo
+
+if (( MEASURED_LATENCY_INCREASE > MAX_LATENCY_INCREASE )); then
+    echo "FAIL: Migration latency increased beyond ${MAX_LATENCY_INCREASE}%."
+    echo "Migration must be aborted."
+    exit 1
+fi
+
 echo "ZERO-DOWNTIME MIGRATION GATE: PASS"
