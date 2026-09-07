@@ -3,7 +3,7 @@
 set -e
 
 NAMESPACE="novapay"
-SERVICE="novapay"
+SERVICE="novapay-stable"
 ROLLBACK_VERSION="blue"
 
 echo "Rolling back production traffic to $ROLLBACK_VERSION..."
