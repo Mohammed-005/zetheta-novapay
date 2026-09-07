@@ -221,6 +221,7 @@ jobs:
       - name: Evaluate compliance
         run: |
           opa eval \
+            --fail \
             --data policies/compliance.rego \
             --input policies/input.json \
             "data.novapay.compliance.compliance_pass"
@@ -240,6 +241,8 @@ jobs:
       - integration-test
       - dast
       - compliance
+      - sbom
+      - image-signing
 
     steps:
       - name: All gates passed
