@@ -181,3 +181,9 @@ These integrations allow the Category A and Category B thresholds to be evaluate
 Rollback should restore the last known-good application version without destroying backward-compatible database state.
 
 The deployment system must prefer a fast, reversible traffic change over destructive infrastructure changes during an incident.
+
+---
+
+## AI Attribution
+
+AI assistance was used for drafting, structuring, reviewing, and troubleshooting parts of this deliverable. Final technical decisions, validation, testing, and repository implementation were reviewed by the author.

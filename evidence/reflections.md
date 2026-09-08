@@ -73,3 +73,9 @@ database compatibility, observability, and operations all need to work together.
 The most valuable outcome is not just the pipeline YAML, but the ability to
 explain why each gate exists, what condition causes it to fail, how an operator
 detects the failure, and how the deployment can be safely rolled back.
+
+---
+
+## AI Attribution
+
+AI assistance was used for drafting, structuring, reviewing, and troubleshooting parts of this deliverable. Final technical decisions, validation, testing, and repository implementation were reviewed by the author.

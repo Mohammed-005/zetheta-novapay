@@ -219,3 +219,9 @@ Emergency access must not become a permanent bypass around the normal CI/CD cont
 ## 14. Design Goal
 
 The promotion model provides controlled movement from rapid developer feedback to production while maintaining security, compliance, segregation of duties, auditability and rollback capability.
+
+---
+
+## AI Attribution
+
+AI assistance was used for drafting, structuring, reviewing, and troubleshooting parts of this deliverable. Final technical decisions, validation, testing, and repository implementation were reviewed by the author.
