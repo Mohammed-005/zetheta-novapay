@@ -2,56 +2,94 @@
 set -euo pipefail
 
 NAMESPACE="novapay"
-SERVICE="novapay"
+STABLE_SERVICE="novapay-stable"
 
-echo "======================================"
-echo " NovaPay Production Verification Gate"
-echo "======================================"
+echo "Production verification gate"
+echo "============================="
 
-echo "[1/4] Checking deployment availability..."
+echo "[1/4] Checking stable service..."
 
-READY=$(kubectl get deployment -n "$NAMESPACE" "$SERVICE" \
-  -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+STABLE_VERSION=$(kubectl get svc "$STABLE_SERVICE" \
+  -n "$NAMESPACE" \
+  -o jsonpath='{.spec.selector.version}')
 
-DESIRED=$(kubectl get deployment -n "$NAMESPACE" "$SERVICE" \
-  -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
-
-echo "Ready replicas: ${READY:-0}"
-echo "Desired replicas: ${DESIRED:-0}"
-
-if [ "${READY:-0}" -lt "${DESIRED:-1}" ]; then
-    echo "FAIL: Not all production replicas are ready."
-    echo "Triggering rollback..."
-    ./scripts/rollback.sh
-    exit 1
+if [[ -z "$STABLE_VERSION" ]]; then
+  echo "FAIL: Could not determine stable version."
+  echo "Triggering rollback..."
+  ./scripts/rollback.sh
+  exit 1
 fi
 
-echo "[2/4] Checking pod health..."
+DEPLOYMENT="novapay-${STABLE_VERSION}"
 
-UNHEALTHY=$(kubectl get pods -n "$NAMESPACE" \
-  -l app=novapay \
+echo "Stable version: $STABLE_VERSION"
+echo "Deployment: $DEPLOYMENT"
+
+kubectl get deployment "$DEPLOYMENT" -n "$NAMESPACE"
+
+READY=$(kubectl get deployment "$DEPLOYMENT" \
+  -n "$NAMESPACE" \
+  -o jsonpath='{.status.readyReplicas}')
+
+DESIRED=$(kubectl get deployment "$DEPLOYMENT" \
+  -n "$NAMESPACE" \
+  -o jsonpath='{.spec.replicas}')
+
+if [[ "$READY" != "$DESIRED" ]]; then
+  echo "FAIL: Deployment is not fully ready."
+  echo "Ready: ${READY:-0}/${DESIRED}"
+  echo "Triggering rollback..."
+  ./scripts/rollback.sh
+  exit 1
+fi
+
+echo "[2/4] Checking production pods..."
+
+UNHEALTHY=$(kubectl get pods \
+  -n "$NAMESPACE" \
+  -l "app=novapay,version=$STABLE_VERSION" \
   --field-selector=status.phase!=Running \
   --no-headers 2>/dev/null | wc -l)
 
-if [ "$UNHEALTHY" -gt 0 ]; then
-    echo "FAIL: Unhealthy production pods detected."
-    ./scripts/rollback.sh
-    exit 1
+if [[ "$UNHEALTHY" -gt 0 ]]; then
+  echo "FAIL: Unhealthy production pods detected."
+  ./scripts/rollback.sh
+  exit 1
 fi
 
-echo "[3/4] Running HTTP health check..."
+echo "Production pods are healthy."
 
-kubectl run novapay-gate-check \
+echo "[3/4] Checking application health..."
+
+kubectl run production-health-check \
   -n "$NAMESPACE" \
-  --rm \
+  --rm -i \
   --restart=Never \
   --image=curlimages/curl:8.10.1 \
-  --command -- \
+  -- \
   curl -fsS --max-time 5 \
-  "http://${SERVICE}/health"
+  "http://${STABLE_SERVICE}/health"
 
 echo
-echo "HTTP health check PASSED."
+echo "[4/4] Verifying active version..."
 
-echo "[4/4] Production verification PASSED."
+ACTIVE_VERSION=$(kubectl run production-version-check \
+  -n "$NAMESPACE" \
+  --rm -i \
+  --restart=Never \
+  --image=curlimages/curl:8.10.1 \
+  -- \
+  curl -fsS --max-time 5 \
+  "http://${STABLE_SERVICE}/version")
+
+echo "Active version response: $ACTIVE_VERSION"
+
+if ! echo "$ACTIVE_VERSION" | grep -q "\"version\":\"$STABLE_VERSION\""; then
+  echo "FAIL: Active version does not match stable service selector."
+  echo "Triggering rollback..."
+  ./scripts/rollback.sh
+  exit 1
+fi
+
+echo "Production verification PASSED."
 echo "No rollback required."

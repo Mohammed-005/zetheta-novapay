@@ -3,7 +3,7 @@ set -euo pipefail
 
 NAMESPACE="novapay"
 CANARY_SERVICE="novapay-canary"
-STABLE_SERVICE="novapay"
+STABLE_SERVICE="novapay-stable"
 
 echo "=== NovaPay Canary Verification ==="
 
