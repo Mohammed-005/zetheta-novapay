@@ -1,0 +1,25 @@
+{
+  "title": "NovaPay CI/CD & Production Reliability",
+  "description": "Assessment dashboard definition covering DORA, pipeline gates, deployment health, rollback signals and SLOs.",
+  "panels": [
+    {"title":"Deployment Frequency","metric":"deployments_per_day","target":">= 1/day"},
+    {"title":"Lead Time for Changes","metric":"commit_to_prod_minutes","target":"< 120m"},
+    {"title":"Change Failure Rate","metric":"change_failure_rate","target":"< 15%"},
+    {"title":"MTTR","metric":"mean_time_to_recovery_minutes","target":"< 60m"},
+    {"title":"Build Success Rate","metric":"build_success_rate","target":"> 95%"},
+    {"title":"Pipeline Gate Pass Rate","metric":"gate_pass_rate","target":"> 95%"},
+    {"title":"HTTP 5xx Error Rate","metric":"http_5xx_rate","rollback_threshold":"> 5% for 60s"},
+    {"title":"p99 Latency","metric":"http_p99_latency_ms","rollback_threshold":"> 2x baseline for 5m"},
+    {"title":"CPU Utilization","metric":"cpu_utilization_percent","rollback_threshold":"> 90% for 5m"},
+    {"title":"Memory Utilization","metric":"memory_utilization_percent","rollback_threshold":"> 85% for 5m"}
+  ],
+  "rollback_categories": {
+    "A": "< 60 seconds",
+    "B": "< 15 minutes",
+    "C": "Manual investigation"
+  },
+  "deployment_strategies": [
+    "Blue-Green",
+    "Canary"
+  ]
+}
